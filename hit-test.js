@@ -84,6 +84,7 @@ AFRAME.registerComponent("ar-hit-test", {
 		});
 
 		this.el.sceneEl.renderer.xr.addEventListener("sessionstart", async () => {
+			this.hasPosedOnce = false;
 			const renderer = this.el.sceneEl.renderer;
 			const session = this.session = renderer.xr.getSession();
 
@@ -103,28 +104,32 @@ AFRAME.registerComponent("ar-hit-test", {
 
 			session.addEventListener('selectstart', ({ inputSource }) => {
 				this.bboxMesh.visible = true;
-				if (inputSource.profiles[0] === profileToSupport) {
-					this.hitTest = transientHitTest;
-				} else {
-					this.hitTest = hitTestCache.get(inputSource) || new HitTest(renderer, {
-						space: inputSource.targetRaySpace
-					});
-					hitTestCache.set(inputSource, this.hitTest);
+				if (this.hasPosedOnce === true) {
+					if (inputSource.profiles[0] === profileToSupport) {
+						this.hitTest = transientHitTest;
+					} else {
+						this.hitTest = hitTestCache.get(inputSource) || new HitTest(renderer, {
+							space: inputSource.targetRaySpace
+						});
+						hitTestCache.set(inputSource, this.hitTest);
+					}
 				}
 			});
 
 			session.addEventListener('selectend', ({ inputSource }) => {
-				this.el.emit('select', { inputSource });
-				this.bboxMesh.visible = false;
-				this.hitTest = null;
+				if (this.hasPosedOnce === true) {
+					this.el.emit('ar-hit-test-select', { inputSource });
 
-				if (this.data.target) {
-					const target = this.data.target;				
-					target.setAttribute("position", this.bboxMesh.position);
-					target.object3D.quaternion.copy(this.bboxMesh.quaternion);
-					target.object3D.visible = true;
+					this.bboxMesh.visible = false;
+					this.hitTest = null;
+
+					if (this.data.target) {
+						const target = this.data.target;				
+						target.setAttribute("position", this.bboxMesh.position);
+						target.object3D.quaternion.copy(this.bboxMesh.quaternion);
+						target.object3D.visible = true;
+					}
 				}
-
 			});
 		});
 
@@ -165,6 +170,10 @@ AFRAME.registerComponent("ar-hit-test", {
 		if (this.hitTest) {
 			const pose = this.hitTest.doHit(frame);
 			if (pose) {
+				if (this.hasPosedOnce !== true) {
+					this.hasPosedOnce = true;
+					this.el.emit('ar-hit-test-achieved');
+				}
 				this.bboxMesh.visible = true;
 				this.bboxMesh.position.copy(pose.transform.position);
 				this.bboxMesh.quaternion.copy(pose.transform.orientation);
